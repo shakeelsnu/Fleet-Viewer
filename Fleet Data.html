@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Excel Search Dashboard By Shakeel</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: linear-gradient(to right, #f0f8ff, #e6f7ff);
+      color: #333;
+      padding: 30px;
+    }
+    h1 {
+      color: #007acc;
+      text-shadow: 1px 1px 2px #ccc;
+    }
+    input[type="text"], input[type="password"], input[type="file"] {
+      padding: 10px;
+      margin: 10px 0;
+      border: 2px solid #007acc;
+      border-radius: 5px;
+      width: 300px;
+    }
+    button {
+      padding: 10px 15px;
+      margin: 5px;
+      border: none;
+      border-radius: 5px;
+      background-color: #007acc;
+      color: white;
+      cursor: pointer;
+      box-shadow: 1px 1px 5px #aaa;
+    }
+    button:hover {
+      background-color: #005f99;
+    }
+    .highlight {
+      background-color: yellow;
+      font-weight: bold;
+    }
+    .hidden {
+      display: none;
+    }
+    #results {
+      margin-top: 20px;
+      background-color: #f9f9f9;
+      padding: 15px;
+      border-radius: 8px;
+      box-shadow: 0 0 10px #ccc;
+    }
+    #admin-section {
+      margin-top: 20px;
+      background-color: #fff0f5;
+      padding: 15px;
+      border-radius: 8px;
+      box-shadow: 0 0 10px #ccc;
+    }
+    #timestamp {
+      margin-top: 30px;
+      font-style: italic;
+      color: #555;
+    }
+    #uploadStatus {
+      color: green;
+      font-weight: bold;
+      margin-top: 10px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background-color: white;
+    }
+    th, td {
+      border: 1px solid #ccc;
+      padding: 8px;
+      text-align: left;
+    }
+    thead {
+      background-color: #007acc;
+      color: white;
+    }
+  </style>
+</head>
+<body>
+  <h1>📊 Excel Search Dashboard By Shakeel</h1>
+
+  <input type="text" id="searchInput" placeholder="Search keywords separated by commas..." />
+  <button onclick="performSearch()">Search</button>
+
+  <div id="results" class="hidden">
+    <p><strong>Last Excel Upload:</strong> <span id="excelUploadDate">Not uploaded yet</span></p>
+    <h3>🔎 Search Results</h3>
+    <div id="resultText"></div>
+    <div id="exportButtons" style="margin-top: 15px;">
+      <button onclick="exportToExcel()">📊 Export to Excel</button>
+      <button onclick="printResults()">🖨️ Download as PDF</button>
+    </div>
+  </div>
+
+  <button onclick="toggleAdmin()">Admin Mode</button>
+
+  <div id="admin-login" class="hidden">
+    <h3>🔐 Admin Login</h3>
+    <input type="text" id="adminUser" placeholder="Username" /><br/>
+    <input type="password" id="adminPassword" placeholder="Password" />
+    <button onclick="adminLogin()">Login</button>
+  </div>
+
+  <div id="admin-section" class="hidden">
+    <h3>👨‍💼 Admin Panel</h3>
+    <p>Your IP: <span id="ipDisplay">Fetching...</span></p>
+    <input type="file" id="excelUpload" accept=".xlsx,.xls" />
+    <button onclick="triggerUpload()">Upload</button>
+    <div id="uploadStatus" class="hidden">✅ Upload successful</div>
+  </div>
+
+  <p id="timestamp">Page loaded: <span id="lastUpdated"></span></p>
+
+  <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+  <script>
+    let remarksIndex = -1;
+
+    document.getElementById("searchInput").addEventListener("keypress", function(e) {
+      if (e.key === "Enter") performSearch();
+    });
+
+    function performSearch() {
+      const input = document.getElementById("searchInput").value.trim();
+      const resultText = document.getElementById("resultText");
+      const resultsContainer = document.getElementById("results");
+
+      if (!input) {
+        resultsContainer.classList.add("hidden");
+        return;
+      }
+
+      const terms = input.split(",").map(term => term.trim().toLowerCase());
+      const storedData = localStorage.getItem("excelRawText") || "";
+      const lines = storedData.split("\n");
+
+      if (lines.length < 2) {
+        resultText.innerHTML = "<p>No data available.</p>";
+        resultsContainer.classList.remove("hidden");
+        return;
+      }
+
+      // Process headers
+      const headers = lines[0].split("\t").map(h => h.split(" ")).flat();
+      remarksIndex = headers.findIndex(h => h.toLowerCase() === "remarks");
+      if (remarksIndex === -1) remarksIndex = headers.length - 1;
+      const filteredHeaders = headers.slice(0, remarksIndex + 1);
+
+      const headerHTML = `<tr><th style="width:50px;">S/N</th>${filteredHeaders.map(h => `<th>${h}</th>`).join("")}</tr>`;
+      let rows = [];
+      let sn = 1;
+
+      for (let i = 1; i < lines.length; i++) {
+        const line = lines[i];
+        let cols = line.split("\t");
+
+        // Split by space
+        let expandedCols = [];
+        cols.forEach(cell => {
+          expandedCols.push(...cell.split(" "));
+        });
+
+        // Keep only up to Remarks column
+        expandedCols = expandedCols.slice(0, remarksIndex + 1);
+
+        let matched = false;
+        let highlightedCols = expandedCols.map(col => {
+          let highlighted = col;
+          terms.forEach(term => {
+            const regex = new RegExp(`(${term})`, "gi");
+            if (regex.test(col)) {
+              matched = true;
+              highlighted = highlighted.replace(regex, "<span class='highlight'>$1</span>");
+            }
+          });
+          return highlighted;
+        });
+
+        if (matched) {
+          const rowHTML = `<tr><td>${sn++}</td>${highlightedCols.map(c => `<td>${c}</td>`).join("")}</tr>`;
+          rows.push(rowHTML);
+        }
+      }
+
+      if (rows.length > 0) {
+        resultText.innerHTML = `
+          <table>
+            <thead>${headerHTML}</thead>
+            <tbody>${rows.join("")}</tbody>
+          </table>
+        `;
+      } else {
+        resultText.innerHTML = "<p>No matches found.</p>";
+      }
+
+      resultsContainer.classList.remove("hidden");
+    }
+
+    function toggleAdmin() {
+      document.getElementById("admin-login").classList.toggle("hidden");
+    }
+
+    function adminLogin() {
+  const username = document.getElementById("adminUser").value.trim().toLowerCase();
+  const password = document.getElementById("adminPassword").value.trim().toLowerCase();
+
+  if (username === "shakeel" && password === "9332") {
+    document.getElementById("admin-section").classList.remove("hidden");
+    fetch("https://api.ipify.org?format=json")
+      .then(res => res.json())
+      .then(data => {
+        document.getElementById("ipDisplay").innerText = data.ip;
+      });
+  } else {
+    alert("Incorrect username or password.");
+  }
+}
+
+
+    function triggerUpload() {
+      const fileInput = document.getElementById("excelUpload");
+      const file = fileInput.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        const json = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+        const rawText = json.map(row => row.join("\t")).join("\n");
+        localStorage.setItem("excelRawText", rawText);
+
+        const uploadDate = new Date().toLocaleString();
+        localStorage.setItem("excelUploadDate", uploadDate);
+        document.getElementById("excelUploadDate").innerText = uploadDate;
+
+        document.getElementById("uploadStatus").classList.remove("hidden");
+      };
+      reader.readAsArrayBuffer(file);
+    }
+
+    window.onload = function() {
+      document.getElementById("lastUpdated").innerText = new Date().toLocaleString();
+      const savedDate = localStorage.getItem("excelUploadDate");
+      if (savedDate) {
+        document.getElementById("excelUploadDate").innerText = savedDate;
+      }
+    };
+
+    function exportToExcel() {
+      const resultHTML = document.getElementById("resultText").innerText.trim();
+      if (!resultHTML) return alert("No results to export.");
+
+      const rows = resultHTML.split("\n").map(line => [line]);
+      const worksheet = XLSX.utils.aoa_to_sheet(rows);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Search Results");
+      XLSX.writeFile(workbook, "search_results.xlsx");
+    }
+
+    function printResults() {
+      const printWindow = window.open("", "", "width=800,height=600");
+      const content = document.getElementById("resultText").innerHTML;
+      printWindow.document.write(`
+        <html>
+          <head><title>Search Results</title></head>
+          <body>
+            <h3>Search Results</h3>
+            ${content}
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+      printWindow.focus();
+      printWindow.print();
+    }
+  </script>
+</body>
+</html>
